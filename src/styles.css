@@ -1,0 +1,17 @@
+.App {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+.item {
+  cursor: pointer;
+}
+
+.blocked {
+  text-decoration: line-through;
+  color: #ccc;
+}
+
+.available {
+  text-decoration: none;
+}
