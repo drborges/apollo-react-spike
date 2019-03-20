@@ -124,13 +124,14 @@ const App = () => {
             subscribeToMore({
               document: USER_SUBSCRIPTION,
               updateQuery: (prev, { subscriptionData }) => {
+                console.log(">>>> Subscription received", prev);
                 if (!subscriptionData.data) return prev;
                 const newUser = subscriptionData.data.userAdded;
+                if (prev.users.find(user => user.id === newUser.id))
+                  return prev;
 
                 return Object.assign({}, prev, {
-                  entry: {
-                    users: [...prev.entry.comments, newUser]
-                  }
+                  users: [...prev.users, newUser]
                 });
               }
             });
@@ -146,7 +147,7 @@ const App = () => {
                     className={`item ${user.blocked ? "blocked" : "available"}`}
                     onClick={mutate}
                   >
-                    {user.name}
+                    {user.name} (#{user.id})
                   </li>
                 )}
               </Mutation>
