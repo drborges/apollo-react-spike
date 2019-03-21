@@ -133,17 +133,18 @@ const withUsersData = graphql(FETCH_USERS, {
   }
 });
 
-const UserRowWithMutation = withToggleBlockStateMutation(props => {
-  const { onBlock, user } = props;
-  return (
-    <li
-      className={`item ${user.blocked ? "blocked" : "available"}`}
-      onClick={onBlock}
-    >
-      {user.name} (#{user.id})
-    </li>
-  );
-});
+const UserRowWithMutation = withToggleBlockStateMutation(
+  ({ onBlock, user }) => {
+    return (
+      <li
+        className={`item ${user.blocked ? "blocked" : "available"}`}
+        onClick={onBlock}
+      >
+        {user.name} (#{user.id})
+      </li>
+    );
+  }
+);
 
 const UsersListWithData = withUsersData(({ data: { users } }) => {
   return (
