@@ -7,10 +7,13 @@ import { WebSocketLink } from "apollo-link-ws";
 import { split } from "apollo-link";
 import { getMainDefinition } from "apollo-utilities";
 import { InMemoryCache } from "apollo-cache-inmemory";
-import { ApolloProvider, Query, Mutation, Subscription } from "react-apollo";
+import { graphql, ApolloProvider } from "react-apollo";
 
 import "./styles.css";
 
+/**
+ * Extending the remote schema with a local one
+ */
 export const typeDefs = gql`
   extend type User {
     blocked: Boolean!
@@ -33,6 +36,9 @@ const FETCH_USERS = gql`
   }
 `;
 
+/**
+ * Graphql documents definitions
+ */
 const TOGGLE_USER_BLOCK_STATE = gql`
   mutation ToggleUserBlockState($id: Int!) {
     toggleUserBlockState(id: $id) @client {
@@ -42,18 +48,9 @@ const TOGGLE_USER_BLOCK_STATE = gql`
   }
 `;
 
-const USER_SUBSCRIPTION = gql`
-  subscription onUserAdded {
-    userAdded {
-      id
-      name
-      email
-      age
-      blocked @client
-    }
-  }
-`;
-
+/**
+ * This setup can be simplified with apollo-boost
+ */
 const cache = new InMemoryCache();
 const sandboxId = "kop4j51nkr";
 const wsLink = new WebSocketLink({
@@ -80,7 +77,7 @@ const link = split(
 );
 
 const client = new ApolloClient({
-  link,
+  link: httpLink,
   cache,
   // Register a local schema which extends the remote one with local state.
   typeDefs,
@@ -95,10 +92,11 @@ const client = new ApolloClient({
       }
     },
     Mutation: {
-      toggleUserBlockState: (user, { id }, { cache }) => {
+      toggleUserBlockState: (parent, { id }, { cache }) => {
         const data = cache.readQuery({ query: FETCH_USERS });
         const { users } = data;
         const userFromCache = users.find(u => u.id === id);
+
         userFromCache.blocked = !userFromCache.blocked;
         cache.writeQuery({ query: FETCH_USERS, data });
       }
@@ -106,58 +104,94 @@ const client = new ApolloClient({
   }
 });
 
+// Initializes the cache with default data
 cache.writeData({
   data: {
     users: []
   }
 });
 
+// These "with*" 'graphql' "connections" are similar to how one creates containers in Redux
+const withToggleBlockStateMutation = graphql(TOGGLE_USER_BLOCK_STATE, {
+  // Graphql query options with access to the incoming props
+  options: props => ({
+    variables: {
+      id: props.user.id
+    }
+  }),
+  // This allows transforming the props that will be passed
+  // into the target component
+  props: ({ ownProps, mutate }) => ({
+    user: ownProps.user,
+    onBlock: mutate
+  })
+});
+
+const withUsersData = graphql(FETCH_USERS, {
+  options: {
+    fetchPolicy: "cache-and-network"
+  }
+});
+
+const UserRowWithMutation = withToggleBlockStateMutation(props => {
+  const { onBlock, user } = props;
+  return (
+    <li
+      className={`item ${user.blocked ? "blocked" : "available"}`}
+      onClick={onBlock}
+    >
+      {user.name} (#{user.id})
+    </li>
+  );
+});
+
+const UsersListWithData = withUsersData(({ data: { users } }) => {
+  return (
+    <ul>
+      {users.map(user => (
+        <UserRowWithMutation user={user} />
+      ))}
+    </ul>
+  );
+});
+
 const App = () => {
   return (
     <ApolloProvider client={client}>
-      <ul>
-        <Query query={FETCH_USERS} fetchPolicy="network-only">
-          {({ loading, error, data, subscribeToMore }) => {
-            if (loading) return <li>Loading...</li>;
-            if (error) return <li>Error :(</li>;
-
-            subscribeToMore({
-              document: USER_SUBSCRIPTION,
-              updateQuery: (prev, { subscriptionData }) => {
-                console.log(">>>> Subscription received", prev);
-                if (!subscriptionData.data) return prev;
-                const newUser = subscriptionData.data.userAdded;
-                if (prev.users.find(user => user.id === newUser.id))
-                  return prev;
-
-                return Object.assign({}, prev, {
-                  users: [...prev.users, newUser]
-                });
-              }
-            });
-
-            return data.users.map(user => (
-              <Mutation
-                key={user.id}
-                mutation={TOGGLE_USER_BLOCK_STATE}
-                variables={{ id: user.id }}
-              >
-                {mutate => (
-                  <li
-                    className={`item ${user.blocked ? "blocked" : "available"}`}
-                    onClick={mutate}
-                  >
-                    {user.name} (#{user.id})
-                  </li>
-                )}
-              </Mutation>
-            ));
-          }}
-        </Query>
-      </ul>
+      <UsersListWithData />
     </ApolloProvider>
   );
 };
 
 const rootElement = document.getElementById("root");
 ReactDOM.render(<App />, rootElement);
+
+// subscribeToMore({
+//   document: USER_SUBSCRIPTION,
+//   updateQuery: (prev, { subscriptionData }) => {
+//     console.log(">>>> Subscription received", prev);
+//     if (!subscriptionData.data) {
+//       return prev;
+//     }
+
+//     const newUser = subscriptionData.data.userAdded;
+//     if (prev.users.find(user => user.id === newUser.id)) {
+//       return prev;
+//     }
+
+//     return Object.assign({}, prev, {
+//       users: [...prev.users, newUser]
+//     });
+//   }
+// });
+// const USER_SUBSCRIPTION = gql`
+//   subscription onUserAdded {
+//     userAdded {
+//       id
+//       name
+//       email
+//       age
+//       blocked @client
+//     }
+//   }
+// `;
